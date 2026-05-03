@@ -464,98 +464,130 @@ export function EditorShell({ document }: { document: DocumentRecord }) {
         ))}
       </div>
 
-      {/* Top bar */}
-      <div className="sticky top-4 z-40 flex items-center justify-between gap-4 rounded-[24px] border bg-white/95 px-4 py-3 shadow-card backdrop-blur">
-        <div className="min-w-0 flex-1">
-          {isEditingTitle ? (
-            <input
-              autoFocus
-              value={docTitle}
-              onChange={(e) => setDocTitle(e.target.value)}
-              onBlur={() => setIsEditingTitle(false)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === "Escape") setIsEditingTitle(false);
-              }}
-              className="w-full rounded-lg bg-slate-50 px-2 py-1 text-lg font-semibold text-ink outline-none ring-1 ring-ink/20"
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={() => { if (!isReadOnly) setIsEditingTitle(true); }}
-              className="group flex items-center gap-1.5 text-left"
-            >
-              <h1 className="truncate text-lg font-semibold text-ink">{docTitle}</h1>
-              <Pencil className="h-3.5 w-3.5 shrink-0 text-slate-400 opacity-0 transition group-hover:opacity-100" />
-            </button>
-          )}
-
-          {isEditingSender ? (
-            <div className="mt-1 flex items-center gap-2">
+      {/* Top bar — sticks below the app header (≈64 px) */}
+      <div className="sticky top-16 z-40 rounded-[24px] border bg-white/95 shadow-card backdrop-blur">
+        {/* Mobile: column (title → buttons). sm+: single row side-by-side. */}
+        <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+          {/* Title + sender — full width on mobile */}
+          <div className="min-w-0 sm:flex-1">
+            {isEditingTitle ? (
               <input
                 autoFocus
-                value={senderName}
-                onChange={(e) => setSenderName(e.target.value)}
-                onBlur={() => setIsEditingSender(false)}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") setIsEditingSender(false); }}
-                placeholder="Sender name"
-                className="w-36 rounded bg-slate-50 px-2 py-0.5 text-xs outline-none ring-1 ring-ink/20"
+                value={docTitle}
+                onChange={(e) => setDocTitle(e.target.value)}
+                onBlur={() => setIsEditingTitle(false)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === "Escape") setIsEditingTitle(false);
+                }}
+                className="w-full rounded-lg bg-slate-50 px-2 py-1 text-lg font-semibold text-ink outline-none ring-1 ring-ink/20"
               />
-              <input
-                value={senderEmail}
-                onChange={(e) => setSenderEmail(e.target.value)}
-                onBlur={() => setIsEditingSender(false)}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") setIsEditingSender(false); }}
-                placeholder="Reply-to email"
-                className="w-44 rounded bg-slate-50 px-2 py-0.5 text-xs outline-none ring-1 ring-ink/20"
-              />
-            </div>
-          ) : (
+            ) : (
+              <button
+                type="button"
+                onClick={() => { if (!isReadOnly) setIsEditingTitle(true); }}
+                className="group flex min-w-0 w-full items-center gap-1.5 text-left"
+              >
+                <h1 className="truncate text-lg font-semibold text-ink">{docTitle}</h1>
+                <Pencil className="h-3.5 w-3.5 shrink-0 text-slate-400 opacity-0 transition group-hover:opacity-100" />
+              </button>
+            )}
+
+            {isEditingSender ? (
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  autoFocus
+                  value={senderName}
+                  onChange={(e) => setSenderName(e.target.value)}
+                  onBlur={() => setIsEditingSender(false)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") setIsEditingSender(false); }}
+                  placeholder="Sender name"
+                  className="w-36 rounded bg-slate-50 px-2 py-0.5 text-xs outline-none ring-1 ring-ink/20"
+                />
+                <input
+                  value={senderEmail}
+                  onChange={(e) => setSenderEmail(e.target.value)}
+                  onBlur={() => setIsEditingSender(false)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") setIsEditingSender(false); }}
+                  placeholder="Reply-to email"
+                  className="w-44 rounded bg-slate-50 px-2 py-0.5 text-xs outline-none ring-1 ring-ink/20"
+                />
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => { if (!isReadOnly) setIsEditingSender(true); }}
+                className="group mt-0.5 flex min-w-0 w-full items-center gap-1 text-left"
+              >
+                <p className="truncate text-sm text-slate-500">
+                  {senderName} · {senderEmail}
+                </p>
+                <Pencil className="h-3 w-3 shrink-0 text-slate-400 opacity-0 transition group-hover:opacity-100" />
+              </button>
+            )}
+          </div>
+
+          {/* Actions row */}
+          <div className="flex items-center gap-2 sm:shrink-0">
+            {isReadOnly && document.completed_pdf_path ? (
+              <a
+                href={`/api/documents/${document.id}/completed`}
+                download
+                className="rounded-full bg-[#2A2726] px-3 py-2.5 text-sm font-medium text-white sm:px-4 sm:py-3"
+              >
+                <span className="hidden sm:inline">Download completed PDF</span>
+                <span className="sm:hidden">Download</span>
+              </a>
+            ) : null}
+            {!isReadOnly && (
+            <>
             <button
               type="button"
-              onClick={() => { if (!isReadOnly) setIsEditingSender(true); }}
-              className="group mt-0.5 flex items-center gap-1 text-left"
+              disabled={isSaving}
+              onClick={() => saveDraft("Draft")}
+              className="rounded-full border border-slate-300 px-3 py-2.5 text-sm font-medium text-slate-700 disabled:opacity-50 sm:px-4 sm:py-3"
             >
-              <p className="truncate text-sm text-slate-500">
-                {senderName} · {senderEmail}
-              </p>
-              <Pencil className="h-3 w-3 shrink-0 text-slate-400 opacity-0 transition group-hover:opacity-100" />
+              <span className="hidden sm:inline">Save draft</span>
+              <span className="sm:hidden">Save</span>
             </button>
-          )}
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={() => { setSendStep("form"); setLinkCopied(false); setIsSendModalOpen(true); }}
+              className="inline-flex items-center gap-1.5 rounded-full bg-ink px-3 py-2.5 text-sm font-medium text-white disabled:opacity-50 sm:gap-2 sm:px-4 sm:py-3"
+            >
+              <Mail className="h-4 w-4" />
+              <span className="hidden sm:inline">Save and send</span>
+              <span className="sm:hidden">Send</span>
+            </button>
+            </>
+            )}
+          </div>
         </div>
 
-        <div className="flex shrink-0 flex-wrap gap-3">
-          {isReadOnly && document.completed_pdf_path ? (
-            <a
-              href={`/api/documents/${document.id}/completed`}
-              download
-              className="rounded-full bg-[#2A2726] px-4 py-3 text-sm font-medium text-white"
-            >
-              Download completed PDF
-            </a>
-          ) : null}
-          {!isReadOnly && (
-          <>
-          <button
-            type="button"
-            disabled={isSaving}
-            onClick={() => saveDraft("Draft")}
-            className="rounded-full border border-slate-300 px-4 py-3 text-sm font-medium text-slate-700 disabled:opacity-50"
-          >
-            Save draft
-          </button>
-          <button
-            type="button"
-            disabled={isSaving}
-            onClick={() => { setSendStep("form"); setLinkCopied(false); setIsSendModalOpen(true); }}
-            className="inline-flex items-center gap-2 rounded-full bg-ink px-4 py-3 text-sm font-medium text-white disabled:opacity-50"
-          >
-            <Mail className="h-4 w-4" />
-            <span className="hidden sm:inline">Save and send</span>
-            <span className="sm:hidden">Send</span>
-          </button>
-          </>
-          )}
-        </div>
+        {/* Mobile field-type toolbar — row inside sticky bar, scrolls horizontally */}
+        {!isReadOnly && (
+          <div className="flex gap-1 overflow-x-auto border-t border-slate-100 px-3 pb-2.5 pt-2 xl:hidden">
+            {fieldCategories.map((cat, ci) => (
+              <div key={cat.label} className="flex shrink-0 gap-1">
+                {ci > 0 && <div className="mx-1 w-px self-stretch bg-slate-100" />}
+                {cat.tools.map((tool) => {
+                  const Icon = tool.icon;
+                  return (
+                    <button
+                      key={tool.type}
+                      type="button"
+                      onClick={() => addField(tool.type)}
+                      title={tool.label}
+                      className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-700 transition hover:bg-slate-100 active:bg-slate-200"
+                    >
+                      <Icon className="h-4 w-4" />
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {isReadOnly ? (
@@ -563,33 +595,6 @@ export function EditorShell({ document }: { document: DocumentRecord }) {
           This document is completed and locked. You can preview or download it, but edits and updates are disabled.
         </div>
       ) : null}
-
-      {/* Mobile floating toolbar */}
-      {!isReadOnly && (
-      <div className="fixed left-3 right-3 top-20 z-30 xl:hidden">
-        <div className="flex max-w-full gap-1 overflow-x-auto rounded-2xl border bg-white/95 p-2 shadow-card backdrop-blur">
-          {fieldCategories.map((cat, ci) => (
-            <div key={cat.label} className="flex shrink-0 gap-1">
-              {ci > 0 && <div className="mx-1 border-l border-slate-100" />}
-              {cat.tools.map((tool) => {
-                const Icon = tool.icon;
-                return (
-                  <button
-                    key={tool.type}
-                    type="button"
-                    onClick={() => addField(tool.type)}
-                    title={tool.label}
-                    className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-700 transition hover:bg-slate-100"
-                  >
-                    <Icon className="h-4 w-4" />
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      </div>
-      )}
 
       <div className={cn(
         "grid gap-4",
