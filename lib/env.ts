@@ -7,7 +7,7 @@ const envSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   SUPABASE_STORAGE_BUCKET: z.string().default("documents"),
   RESEND_API_KEY: z.string().min(1),
-  EMAIL_FROM: z.string().email().default("sign@updates.example.com")
+  EMAIL_FROM: z.string().trim().email().default("sign@updates.example.com")
 });
 
 type AppEnv = z.infer<typeof envSchema>;
