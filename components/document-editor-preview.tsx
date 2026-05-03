@@ -7,6 +7,14 @@ import { Document, Page, pdfjs } from "react-pdf";
 import type { FieldDraft } from "@/lib/types";
 import { SignatureModal } from "@/components/signature-modal";
 import { cn } from "@/lib/utils";
+import {
+  getFieldRect,
+  getPageScale,
+  getScaledFieldPadding,
+  getScaledFontSize,
+  getScaledPageDimensions,
+  type PageDimensions
+} from "@/lib/field-rendering";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -45,6 +53,7 @@ export function DocumentEditorPreview({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const [pageWidth, setPageWidth] = useState(0);
+  const [pageSizes, setPageSizes] = useState<Record<number, PageDimensions>>({});
   const [numPages, setNumPages] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [currentPage, setCurrentPage] = useState(1);
@@ -73,12 +82,30 @@ export function DocumentEditorPreview({
   useEffect(() => {
     const element = scrollRef.current;
     if (!element) return;
-    const updateWidth = () => setPageWidth(Math.max(320, element.clientWidth - 48));
+    const updateWidth = () => {
+      const horizontalPadding = window.matchMedia("(min-width: 640px)").matches ? 32 : 16;
+      setPageWidth(Math.max(1, element.clientWidth - horizontalPadding));
+    };
     updateWidth();
     const observer = new ResizeObserver(updateWidth);
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
+
+  function rememberPageDimensions(
+    pageNumber: number,
+    page: { getViewport: (options: { scale: number }) => PageDimensions }
+  ) {
+    const viewport = page.getViewport({ scale: 1 });
+    setPageSizes((current) => {
+      const existing = current[pageNumber];
+      if (existing?.width === viewport.width && existing.height === viewport.height) return current;
+      return {
+        ...current,
+        [pageNumber]: { width: viewport.width, height: viewport.height }
+      };
+    });
+  }
 
   useEffect(() => {
     const root = scrollRef.current;
@@ -312,7 +339,7 @@ export function DocumentEditorPreview({
 
       <div
         ref={scrollRef}
-        className="h-[78vh] min-h-[720px] overflow-y-auto rounded-[24px] bg-slate-100 p-4"
+        className="h-[78vh] min-h-[520px] overflow-auto rounded-[24px] bg-slate-100 p-2 sm:min-h-[720px] sm:p-4"
       >
         <Document
           file={`/api/documents/${documentId}/source`}
@@ -341,19 +368,27 @@ export function DocumentEditorPreview({
 
           {Array.from({ length: numPages }, (_, index) => {
             const pageNumber = index + 1;
+            const displayWidth = Math.max(1, pageWidth * zoom);
+            const originalPage = pageSizes[pageNumber];
+            const displayScale = getPageScale(displayWidth, originalPage?.width);
+            const displayPage = originalPage
+              ? getScaledPageDimensions(originalPage, displayWidth)
+              : { width: displayWidth, height: 0 };
 
             return (
               <div
                 key={pageNumber}
                 ref={(node) => { pageRefs.current[pageNumber] = node; }}
-                className="relative mx-auto mb-6 w-fit rounded-[20px] bg-white shadow-sm"
+                className="relative mx-auto mb-6 overflow-hidden rounded-[20px] bg-white shadow-sm"
+                style={originalPage ? { width: displayPage.width, height: displayPage.height } : undefined}
               >
                 <Page
                   pageNumber={pageNumber}
-                  width={pageWidth * zoom}
+                  width={displayWidth}
                   renderAnnotationLayer={false}
                   renderTextLayer={false}
                   loading={null}
+                  onLoadSuccess={(page) => rememberPageDimensions(pageNumber, page)}
                 />
 
                 <div className="pointer-events-none absolute inset-0 z-10">
@@ -364,22 +399,29 @@ export function DocumentEditorPreview({
                       const isEditing = editingFieldId === field.id;
                       const hasCaptured = isSignature && !!field.value;
                       const isCheckbox = field.type === "checkbox";
-                      const isTextInput = !isSignature && !isCheckbox;
+                      const rect = originalPage
+                        ? getFieldRect(field, displayPage.width, displayPage.height)
+                        : null;
+                      const padding = getScaledFieldPadding(displayScale);
 
                       const fieldStyle = {
-                        left: `${field.x * 100}%`,
-                        top: `${field.y * 100}%`,
-                        width: `${field.width * 100}%`,
-                        height: `${field.height * 100}%`,
-                        minHeight: isTextInput ? "36px" : undefined
+                        left: rect ? `${rect.left}px` : `${field.x * 100}%`,
+                        top: rect ? `${rect.top}px` : `${field.y * 100}%`,
+                        width: rect ? `${rect.width}px` : `${field.width * 100}%`,
+                        height: rect ? `${rect.height}px` : `${field.height * 100}%`
                       };
 
                       const textStyle = {
                         color: field.textColor,
-                        fontSize: `${Math.max(10, field.fontSize * 0.75)}px`,
+                        fontSize: `${getScaledFontSize(field, displayScale)}px`,
                         fontWeight: field.fontWeight === "bold" ? 700 : 400,
                         fontFamily: editorFontFamily(field.fontFamily)
                       };
+                      const contentPadding = {
+                        paddingInline: `${padding.x}px`,
+                        paddingBlock: `${padding.y}px`
+                      };
+                      const checkboxSize = `${Math.min(rect?.width ?? 16, rect?.height ?? 16)}px`;
 
                       return (
                         <div
@@ -428,14 +470,20 @@ export function DocumentEditorPreview({
                               ) : (
                                 <div className="flex h-full w-full items-center justify-center">
                                   <span className="flex items-center gap-1.5 text-[10px] font-semibold opacity-60" style={textStyle}>
-                                    <PenLine className="h-3 w-3 shrink-0" />
+                                    <PenLine
+                                      className="shrink-0"
+                                      style={{ width: 12 * displayScale, height: 12 * displayScale }}
+                                    />
                                     {field.type === "initials" ? "Add initials" : "Add signature"}
                                   </span>
                                 </div>
                               )
                             ) : isCheckbox ? (
                               <div className="flex h-full w-full items-center justify-center">
-                                <div className="flex h-4 w-4 items-center justify-center rounded border-2 border-teal-500 bg-white">
+                                <div
+                                  className="flex items-center justify-center rounded border-2 border-teal-500 bg-white"
+                                  style={{ width: checkboxSize, height: checkboxSize }}
+                                >
                                   {field.value === "true" && (
                                     <svg viewBox="0 0 10 8" className="h-2.5 w-2.5" fill="none" stroke="#0d9488" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                       <path d="M1 4l3 3 5-6" />
@@ -463,12 +511,12 @@ export function DocumentEditorPreview({
                                   }
                                 }}
                                 onPointerDown={(e) => e.stopPropagation()}
-                                className="absolute inset-0 h-full min-h-9 w-full bg-transparent px-3 py-1 outline-none"
-                                style={textStyle}
+                                className="absolute inset-0 h-full w-full bg-transparent outline-none"
+                                style={{ ...textStyle, ...contentPadding }}
                               />
                             ) : (
-                              <div className="flex h-full min-h-9 items-center px-3 py-1" style={textStyle}>
-                                <span className="line-clamp-2 opacity-70">
+                              <div className="flex h-full items-center" style={{ ...textStyle, ...contentPadding }}>
+                                <span className="max-h-full overflow-hidden opacity-70">
                                   {field.value || field.placeholder}
                                 </span>
                               </div>

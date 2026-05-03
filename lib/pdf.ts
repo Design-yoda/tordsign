@@ -3,6 +3,7 @@ import { readFile } from "fs/promises";
 import path from "path";
 import { fetchStoredPdf } from "@/lib/storage";
 import type { CompletedFieldValue, DocumentBlock, DocumentRecord, FieldDraft, FieldType, PageSize, TextSegment } from "@/lib/types";
+import { getPdfFieldRect } from "@/lib/field-rendering";
 
 export const PAGE_SIZES: Record<PageSize, { width: number; height: number; label: string }> = {
   a4: { width: 595, height: 842, label: "A4" },
@@ -327,10 +328,7 @@ export async function renderCompletedPdf(
 
     if (!value) continue;
 
-    const x = field.x * pageWidth;
-    const y = pageHeight - field.y * pageHeight - field.height * pageHeight;
-    const w = field.width * pageWidth;
-    const h = field.height * pageHeight;
+    const { left: x, top: y, width: w, height: h } = getPdfFieldRect(field, pageWidth, pageHeight);
 
     // Image-based fields
     if (field.type === "signature" || field.type === "initials") {

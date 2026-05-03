@@ -6,6 +6,14 @@ import { Document, Page, pdfjs } from "react-pdf";
 import type { FieldDraft } from "@/lib/types";
 import { SignatureModal } from "@/components/signature-modal";
 import { cn } from "@/lib/utils";
+import {
+  getFieldRect,
+  getPageScale,
+  getScaledFieldPadding,
+  getScaledFontSize,
+  getScaledPageDimensions,
+  type PageDimensions
+} from "@/lib/field-rendering";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -26,6 +34,7 @@ export function SigningDocumentView({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const [pageWidth, setPageWidth] = useState(0);
+  const [pageSizes, setPageSizes] = useState<Record<number, PageDimensions>>({});
   const [numPages, setNumPages] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [currentPage, setCurrentPage] = useState(1);
@@ -40,12 +49,30 @@ export function SigningDocumentView({
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const update = () => setPageWidth(Math.max(320, el.clientWidth - 48));
+    const update = () => {
+      const horizontalPadding = window.matchMedia("(min-width: 640px)").matches ? 32 : 16;
+      setPageWidth(Math.max(1, el.clientWidth - horizontalPadding));
+    };
     update();
     const obs = new ResizeObserver(update);
     obs.observe(el);
     return () => obs.disconnect();
   }, []);
+
+  function rememberPageDimensions(
+    pageNumber: number,
+    page: { getViewport: (options: { scale: number }) => PageDimensions }
+  ) {
+    const viewport = page.getViewport({ scale: 1 });
+    setPageSizes((current) => {
+      const existing = current[pageNumber];
+      if (existing?.width === viewport.width && existing.height === viewport.height) return current;
+      return {
+        ...current,
+        [pageNumber]: { width: viewport.width, height: viewport.height }
+      };
+    });
+  }
 
   useEffect(() => {
     const root = scrollRef.current;
@@ -165,7 +192,7 @@ export function SigningDocumentView({
       {/* PDF canvas */}
       <div
         ref={scrollRef}
-        className="h-[78vh] min-h-[720px] overflow-y-auto rounded-[24px] bg-slate-100 p-4"
+        className="h-[78vh] min-h-[520px] overflow-auto rounded-[24px] bg-slate-100 p-2 sm:min-h-[720px] sm:p-4"
       >
         <Document
           file={`/api/documents/${documentId}/source`}
@@ -193,19 +220,27 @@ export function SigningDocumentView({
 
           {Array.from({ length: numPages }, (_, i) => {
             const pageNumber = i + 1;
+            const displayWidth = Math.max(1, pageWidth * zoom);
+            const originalPage = pageSizes[pageNumber];
+            const displayScale = getPageScale(displayWidth, originalPage?.width);
+            const displayPage = originalPage
+              ? getScaledPageDimensions(originalPage, displayWidth)
+              : { width: displayWidth, height: 0 };
 
             return (
               <div
                 key={pageNumber}
                 ref={(node) => { pageRefs.current[pageNumber] = node; }}
-                className="relative mx-auto mb-6 w-fit rounded-[20px] bg-white shadow-sm"
+                className="relative mx-auto mb-6 overflow-hidden rounded-[20px] bg-white shadow-sm"
+                style={originalPage ? { width: displayPage.width, height: displayPage.height } : undefined}
               >
                 <Page
                   pageNumber={pageNumber}
-                  width={pageWidth * zoom}
+                  width={displayWidth}
                   renderAnnotationLayer={false}
                   renderTextLayer={false}
                   loading={null}
+                  onLoadSuccess={(page) => rememberPageDimensions(pageNumber, page)}
                 />
 
                 <div className="pointer-events-none absolute inset-0 z-10">
@@ -219,13 +254,22 @@ export function SigningDocumentView({
                       const isCheckbox = field.type === "checkbox";
                       const isDropdown = field.type === "dropdown";
                       const isRadio = field.type === "radio";
+                      const rect = originalPage
+                        ? getFieldRect(field, displayPage.width, displayPage.height)
+                        : null;
+                      const padding = getScaledFieldPadding(displayScale);
 
                       const textStyle = {
                         color: field.textColor,
-                        fontSize: `${Math.max(10, field.fontSize * 0.75)}px`,
+                        fontSize: `${getScaledFontSize(field, displayScale)}px`,
                         fontWeight: field.fontWeight === "bold" ? 700 : 400,
                         fontFamily: fontFamilyStr(field.fontFamily)
                       };
+                      const contentPadding = {
+                        paddingInline: `${padding.x}px`,
+                        paddingBlock: `${padding.y}px`
+                      };
+                      const checkboxSize = `${Math.min(rect?.width ?? 20, rect?.height ?? 20)}px`;
 
                       return (
                         <div
@@ -244,11 +288,10 @@ export function SigningDocumentView({
                                     : "cursor-pointer border-dashed border-slate-300 bg-slate-50/50 hover:bg-slate-100/50"
                           )}
                           style={{
-                            left: `${field.x * 100}%`,
-                            top: `${field.y * 100}%`,
-                            width: `${field.width * 100}%`,
-                            height: `${field.height * 100}%`,
-                            minHeight: !isSignature && !isCheckbox ? "36px" : undefined
+                            left: rect ? `${rect.left}px` : `${field.x * 100}%`,
+                            top: rect ? `${rect.top}px` : `${field.y * 100}%`,
+                            width: rect ? `${rect.width}px` : `${field.width * 100}%`,
+                            height: rect ? `${rect.height}px` : `${field.height * 100}%`
                           }}
                         >
                           <div className="relative h-full w-full overflow-hidden rounded-[6px]">
@@ -264,8 +307,11 @@ export function SigningDocumentView({
                                 </div>
                               ) : (
                                 <div className="flex h-full w-full items-center justify-center gap-1.5">
-                                  <PenLine className="h-3.5 w-3.5 shrink-0 text-amber-600" />
-                                  <span className="text-[11px] font-semibold text-amber-700">
+                                  <PenLine
+                                    className="shrink-0 text-amber-600"
+                                    style={{ width: 14 * displayScale, height: 14 * displayScale }}
+                                  />
+                                  <span className="font-semibold text-amber-700" style={textStyle}>
                                     {field.type === "initials" ? "Click to add initials" : "Click to sign"}
                                   </span>
                                 </div>
@@ -276,11 +322,13 @@ export function SigningDocumentView({
                                 className="pointer-events-auto flex h-full w-full cursor-pointer items-center justify-center"
                               >
                                 <div className={cn(
-                                  "flex h-5 w-5 items-center justify-center rounded border-2 transition",
+                                  "flex items-center justify-center rounded border-2 transition",
                                   value === "true"
                                     ? "border-teal-500 bg-teal-500"
                                     : "border-amber-400 bg-white hover:border-teal-400"
-                                )}>
+                                )}
+                                  style={{ width: checkboxSize, height: checkboxSize }}
+                                >
                                   {value === "true" && (
                                     <svg viewBox="0 0 10 8" className="h-3 w-3" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                       <path d="M1 4l3 3 5-6" />
@@ -296,8 +344,8 @@ export function SigningDocumentView({
                                   onValueChange(field.id, e.target.value);
                                 }}
                                 onClick={(e) => e.stopPropagation()}
-                                className="pointer-events-auto h-full min-h-9 w-full cursor-pointer bg-transparent px-3 py-1 outline-none"
-                                style={textStyle}
+                                className="pointer-events-auto h-full w-full cursor-pointer bg-transparent outline-none"
+                                style={{ ...textStyle, ...contentPadding }}
                               >
                                 <option value="">Select…</option>
                                 {(field.options ?? ["Option 1", "Option 2", "Option 3"]).map((opt) => (
@@ -305,7 +353,10 @@ export function SigningDocumentView({
                                 ))}
                               </select>
                             ) : isRadio ? (
-                              <div className="pointer-events-auto flex h-full min-h-9 flex-col justify-center gap-1 overflow-y-auto px-3 py-1">
+                              <div
+                                className="pointer-events-auto flex h-full flex-col justify-center gap-1 overflow-y-auto"
+                                style={contentPadding}
+                              >
                                 {(field.options ?? ["Option 1", "Option 2", "Option 3"]).map((opt) => (
                                   <label
                                     key={opt}
@@ -321,7 +372,7 @@ export function SigningDocumentView({
                                       onChange={() => onValueChange(field.id, opt)}
                                       className="h-3 w-3 accent-teal-600"
                                     />
-                                    <span className="text-[10px]">{opt}</span>
+                                    <span>{opt}</span>
                                   </label>
                                 ))}
                               </div>
@@ -343,15 +394,15 @@ export function SigningDocumentView({
                                   }
                                 }}
                                 onClick={(e) => e.stopPropagation()}
-                                className="absolute inset-0 h-full min-h-9 w-full cursor-text bg-white/80 px-3 py-1 outline-none"
-                                style={textStyle}
+                                className="absolute inset-0 h-full w-full cursor-text bg-white/80 outline-none"
+                                style={{ ...textStyle, ...contentPadding }}
                               />
                             ) : (
-                              <div className="flex h-full min-h-9 items-center px-3 py-1" style={textStyle}>
+                              <div className="flex h-full items-center" style={{ ...textStyle, ...contentPadding }}>
                                 {isFilled ? (
-                                  <span className="line-clamp-2">{value}</span>
+                                  <span className="max-h-full overflow-hidden">{value}</span>
                                 ) : (
-                                  <span className="line-clamp-2 text-[10px] opacity-50">
+                                  <span className="max-h-full overflow-hidden opacity-50">
                                     {field.placeholder}{field.required ? " *" : ""}
                                   </span>
                                 )}
