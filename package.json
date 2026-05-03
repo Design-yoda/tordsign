@@ -1,0 +1,45 @@
+{
+  "name": "tord-sign",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "next typegen && tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.8",
+    "@tiptap/extension-color": "^3.22.5",
+    "@tiptap/extension-placeholder": "^3.22.5",
+    "@tiptap/extension-text-align": "^3.22.5",
+    "@tiptap/extension-text-style": "^3.22.5",
+    "@tiptap/extension-underline": "^3.22.5",
+    "@tiptap/pm": "^3.22.5",
+    "@tiptap/react": "^3.22.5",
+    "@tiptap/starter-kit": "^3.22.5",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "lucide-react": "^0.511.0",
+    "nanoid": "^5.1.5",
+    "next": "^15.3.1",
+    "pdf-lib": "^1.17.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-pdf": "^9.2.1",
+    "resend": "^4.4.1",
+    "signature_pad": "^5.0.4",
+    "tailwind-merge": "^3.3.0",
+    "zod": "^3.25.28"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.18",
+    "@types/react": "^19.1.4",
+    "@types/react-dom": "^19.1.5",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.8.3"
+  }
+}
