@@ -12,7 +12,8 @@ const fieldTypeEnum = z.enum([
   "date",
   "checkbox",
   "dropdown",
-  "radio"
+  "radio",
+  "image"
 ]);
 
 const fieldSchema = z.object({
@@ -45,14 +46,15 @@ export const updateDocumentSchema = z.object({
   sourceBlocks: z.array(
     z.object({
       id: z.string(),
-      type: z.enum(["paragraph", "heading1", "heading2", "heading3", "bullet", "numbered", "quote", "divider", "field"]),
+      type: z.enum(["paragraph", "heading1", "heading2", "heading3", "bullet", "numbered", "quote", "divider", "field", "pageBreak", "checkboxItem", "radioGroup", "image"]),
       content: z.string(),
       highlighted: z.boolean().optional(),
       textColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
       backgroundColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
       fieldType: fieldTypeEnum.optional(),
       fieldLabel: z.string().optional(),
-      fieldOptions: z.array(z.string()).optional()
+      fieldOptions: z.array(z.string()).optional(),
+      imageWidthPct: z.number().min(10).max(100).optional(),
     })
   ).optional(),
   title: z.string().optional(),
@@ -95,7 +97,7 @@ const segmentSchema = z.object({
 
 const blockSchema = z.object({
   id: z.string(),
-  type: z.enum(["paragraph", "heading1", "heading2", "heading3", "bullet", "numbered", "quote", "divider", "field"]),
+  type: z.enum(["paragraph", "heading1", "heading2", "heading3", "bullet", "numbered", "quote", "divider", "field", "pageBreak", "checkboxItem", "radioGroup", "image"]),
   content: z.string(),
   segments: z.array(segmentSchema).optional(),
   highlighted: z.boolean().optional(),
@@ -104,7 +106,8 @@ const blockSchema = z.object({
   textAlign: z.enum(["left", "center", "right", "justify"]).optional(),
   fieldType: fieldTypeEnum.optional(),
   fieldLabel: z.string().optional(),
-  fieldOptions: z.array(z.string()).optional()
+  fieldOptions: z.array(z.string()).optional(),
+  imageWidthPct: z.number().min(10).max(100).optional(),
 });
 
 export const createFromBlocksSchema = z.object({
@@ -113,4 +116,10 @@ export const createFromBlocksSchema = z.object({
   senderEmail: z.string().email(),
   blocks: z.array(blockSchema),
   pageSize: z.enum(["a4", "letter", "legal", "a5"]).optional().default("a4"),
+  pageMargins: z.object({
+    top: z.number().min(0).max(300).optional().default(80),
+    right: z.number().min(0).max(300).optional().default(72),
+    bottom: z.number().min(0).max(300).optional().default(80),
+    left: z.number().min(0).max(300).optional().default(72),
+  }).optional(),
 });

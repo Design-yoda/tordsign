@@ -1,7 +1,7 @@
 import { nanoid } from "nanoid";
 import { hasEnv } from "@/lib/env";
 import { createServerSupabaseClient } from "@/lib/supabase";
-import type { AuditEvent, CompletedFieldValue, DocumentBlock, DocumentRecord, FieldDraft, SigningRequestRecord } from "@/lib/types";
+import type { AuditEvent, CompletedFieldValue, DocumentBlock, DocumentRecord, FieldDraft, PageMargins, PageSize, SigningRequestRecord } from "@/lib/types";
 
 type DocumentRow = Omit<DocumentRecord, "fields" | "audit_trail"> & {
   fields: unknown;
@@ -18,15 +18,29 @@ function normalizeDocument(row: DocumentRow): DocumentRecord {
   }));
 
   const auditTrail = (row.audit_trail as AuditEvent[]) ?? [];
-  const sourceBlocksEvent = [...auditTrail]
+  const latestContentEvent = [...auditTrail]
     .reverse()
     .find((event) => event.metadata?.sourceBlocks);
+
   let sourceBlocks: DocumentBlock[] | undefined;
-  if (sourceBlocksEvent?.metadata?.sourceBlocks) {
+  if (latestContentEvent?.metadata?.sourceBlocks) {
     try {
-      sourceBlocks = JSON.parse(sourceBlocksEvent.metadata.sourceBlocks) as DocumentBlock[];
+      sourceBlocks = JSON.parse(latestContentEvent.metadata.sourceBlocks) as DocumentBlock[];
     } catch {
       sourceBlocks = undefined;
+    }
+  }
+
+  let sourcePageSize: PageSize | undefined;
+  let sourcePageMargins: PageMargins | undefined;
+  if (latestContentEvent?.metadata?.pageSize) {
+    sourcePageSize = latestContentEvent.metadata.pageSize as PageSize;
+  }
+  if (latestContentEvent?.metadata?.pageMargins) {
+    try {
+      sourcePageMargins = JSON.parse(latestContentEvent.metadata.pageMargins) as PageMargins;
+    } catch {
+      sourcePageMargins = undefined;
     }
   }
 
@@ -34,7 +48,9 @@ function normalizeDocument(row: DocumentRow): DocumentRecord {
     ...row,
     fields: rawFields,
     audit_trail: auditTrail,
-    source_blocks: sourceBlocks
+    source_blocks: sourceBlocks,
+    source_page_size: sourcePageSize,
+    source_page_margins: sourcePageMargins,
   };
 }
 
@@ -80,16 +96,21 @@ export async function createDraftDocument(input: {
   sourcePdfPath: string;
   initialFields?: FieldDraft[];
   sourceBlocks?: DocumentBlock[];
+  pageSize?: PageSize;
+  pageMargins?: PageMargins;
 }) {
   const supabase = createServerSupabaseClient();
+  const contentMeta: Record<string, string> = {};
+  if (input.sourceBlocks) contentMeta.sourceBlocks = JSON.stringify(input.sourceBlocks);
+  if (input.pageSize) contentMeta.pageSize = input.pageSize;
+  if (input.pageMargins) contentMeta.pageMargins = JSON.stringify(input.pageMargins);
+
   const initialAudit: AuditEvent[] = [
     {
       action: "draft_created",
       actorEmail: input.senderEmail,
       timestamp: new Date().toISOString(),
-      ...(input.sourceBlocks
-        ? { metadata: { sourceBlocks: JSON.stringify(input.sourceBlocks) } }
-        : {})
+      ...(Object.keys(contentMeta).length ? { metadata: contentMeta } : {})
     }
   ];
 
@@ -128,6 +149,8 @@ export async function updateDocumentDraft(
     emailMessage?: string;
     sourceBlocks?: DocumentBlock[];
     sourcePdfPath?: string;
+    pageSize?: PageSize;
+    pageMargins?: PageMargins;
   }
 ) {
   const document = await getDocumentById(id);
@@ -138,15 +161,18 @@ export async function updateDocumentDraft(
     throw new Error("Completed documents are read-only.");
   }
 
+  const updateMeta: Record<string, string> = {};
+  if (input.sourceBlocks) updateMeta.sourceBlocks = JSON.stringify(input.sourceBlocks);
+  if (input.pageSize) updateMeta.pageSize = input.pageSize;
+  if (input.pageMargins) updateMeta.pageMargins = JSON.stringify(input.pageMargins);
+
   const auditTrail = [
     ...document.audit_trail,
     {
       action: "draft_updated",
       actorEmail: document.sender_email,
       timestamp: new Date().toISOString(),
-      ...(input.sourceBlocks
-        ? { metadata: { sourceBlocks: JSON.stringify(input.sourceBlocks) } }
-        : {})
+      ...(Object.keys(updateMeta).length ? { metadata: updateMeta } : {})
     }
   ];
 

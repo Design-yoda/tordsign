@@ -29,6 +29,8 @@ export default async function EditContentPage({
         initialSenderName={document.sender_name}
         initialSenderEmail={document.sender_email}
         initialBlocks={document.source_blocks}
+        initialPageSize={document.source_page_size}
+        initialPageMargins={document.source_page_margins}
       />
     </main>
   );

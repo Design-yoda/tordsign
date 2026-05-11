@@ -4,16 +4,12 @@ import type { ComponentType } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  AlignJustify,
-  Briefcase,
-  Building2,
   CalendarCheck,
   CalendarDays,
   Check,
-  CheckSquare,
   ChevronDown,
-  Circle,
   Copy,
+  Download,
   Eraser,
   FileSignature,
   Link2,
@@ -49,19 +45,14 @@ const fieldCategories: Array<{ label: string; tools: FieldTool[] }> = [
     tools: [
       { type: "date-signed", label: "Date signed", icon: CalendarCheck },
       { type: "full-name", label: "Full name", icon: User },
-      { type: "email", label: "Email address", icon: Mail },
-      { type: "company", label: "Company", icon: Building2 },
-      { type: "job-title", label: "Title", icon: Briefcase }
+      { type: "email", label: "Email address", icon: Mail }
     ]
   },
   {
     label: "Standard fields",
     tools: [
       { type: "text", label: "Textbox", icon: Type },
-      { type: "checkbox", label: "Checkbox", icon: CheckSquare },
-      { type: "dropdown", label: "Dropdown", icon: AlignJustify },
-      { type: "radio", label: "Radio group", icon: Circle },
-      { type: "date", label: "Date", icon: CalendarDays }
+      { type: "date", label: "Date picker", icon: CalendarDays },
     ]
   }
 ];
@@ -540,6 +531,15 @@ export function EditorShell({ document }: { document: DocumentRecord }) {
             ) : null}
             {!isReadOnly && (
             <>
+            <a
+              href={`/api/documents/${document.id}/preview`}
+              download={`${document.title}.pdf`}
+              title="Download PDF with fields"
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 sm:gap-2 sm:px-4 sm:py-3"
+            >
+              <Download className="h-4 w-4" />
+              <span className="hidden sm:inline">Download</span>
+            </a>
             <button
               type="button"
               disabled={isSaving}
@@ -1128,7 +1128,7 @@ export function EditorShell({ document }: { document: DocumentRecord }) {
                   </label>
                 </div>
 
-                <div className="mt-6 flex items-center justify-between gap-3">
+                <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
                   <button
                     type="button"
                     onClick={() => setIsSendModalOpen(false)}
@@ -1136,7 +1136,7 @@ export function EditorShell({ document }: { document: DocumentRecord }) {
                   >
                     Cancel
                   </button>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       disabled={!sendPanel.recipientEmail.trim() || !sendPanel.recipientName.trim() || isGettingLink}
@@ -1146,16 +1146,17 @@ export function EditorShell({ document }: { document: DocumentRecord }) {
                       {isGettingLink
                         ? <LoaderCircle className="h-4 w-4 animate-spin" />
                         : <Link2 className="h-4 w-4" />}
-                      Copy link
+                      <span className="hidden sm:inline">Copy link</span>
                     </button>
                     <button
                       type="button"
                       disabled={!sendPanel.recipientEmail.trim() || !sendPanel.recipientName.trim() || isGettingLink}
                       onClick={() => setSendStep("confirm")}
-                      className="inline-flex items-center gap-2 rounded-full bg-ink px-5 py-3 text-sm font-medium text-white disabled:opacity-50"
+                      className="inline-flex items-center gap-2 rounded-full bg-ink px-4 py-3 text-sm font-medium text-white disabled:opacity-50 sm:px-5"
                     >
                       <Send className="h-4 w-4" />
-                      Review &amp; confirm
+                      <span className="hidden sm:inline">Review &amp; confirm</span>
+                      <span className="sm:hidden">Confirm</span>
                     </button>
                   </div>
                 </div>
@@ -1249,13 +1250,15 @@ export function EditorShell({ document }: { document: DocumentRecord }) {
                     </div>
                   </div>
                 )}
-                <button
-                  type="button"
-                  onClick={() => { setIsSendModalOpen(false); router.push("/"); }}
-                  className="mt-6 inline-flex items-center gap-2 rounded-full bg-ink px-6 py-3 text-sm font-medium text-white"
-                >
-                  Back to documents
-                </button>
+                <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => { setIsSendModalOpen(false); router.push("/"); }}
+                    className="inline-flex items-center gap-2 rounded-full bg-ink px-6 py-3 text-sm font-medium text-white"
+                  >
+                    Back to documents
+                  </button>
+                </div>
               </div>
             ) : null}
 
@@ -1295,13 +1298,15 @@ export function EditorShell({ document }: { document: DocumentRecord }) {
                     </div>
                   </div>
                 )}
-                <button
-                  type="button"
-                  onClick={() => { setIsSendModalOpen(false); router.push("/"); }}
-                  className="mt-6 inline-flex items-center gap-2 rounded-full bg-ink px-6 py-3 text-sm font-medium text-white"
-                >
-                  Back to documents
-                </button>
+                <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => { setIsSendModalOpen(false); router.push("/"); }}
+                    className="inline-flex items-center gap-2 rounded-full bg-ink px-6 py-3 text-sm font-medium text-white"
+                  >
+                    Back to documents
+                  </button>
+                </div>
               </div>
             ) : null}
 

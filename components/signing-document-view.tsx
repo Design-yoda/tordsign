@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, LoaderCircle, Minus, PenLine, Plus } from "lucide-react";
+import { CalendarCheck, ChevronDown, ChevronUp, Lock, LoaderCircle, Minus, PenLine, Plus } from "lucide-react";
 import { Document, Page, pdfjs } from "react-pdf";
 import type { FieldDraft } from "@/lib/types";
 import { SignatureModal } from "@/components/signature-modal";
@@ -117,6 +117,9 @@ export function SigningDocumentView({
       onValueChange(field.id, current === "true" ? "" : "true");
       return;
     }
+
+    // Locked auto-fill fields — not editable by signer
+    if (field.type === "date-signed" || field.type === "email") return;
 
     // All other text-input types
     const current = values[field.id] ?? "";
@@ -243,9 +246,37 @@ export function SigningDocumentView({
                   onLoadSuccess={(page) => rememberPageDimensions(pageNumber, page)}
                 />
 
+                {/* Image overlays (non-interactive) */}
+                <div className="pointer-events-none absolute inset-0 z-5">
+                  {fields
+                    .filter((field) => field.type === "image" && field.value && field.pageNumber === pageNumber)
+                    .map((field) => {
+                      const pageSize = pageSizes[pageNumber];
+                      const scale = pageSize ? displayWidth / pageSize.width : 1;
+                      void scale;
+                      return (
+                        <img
+                          key={field.id}
+                          src={field.value}
+                          alt={field.placeholder || "Image"}
+                          draggable={false}
+                          style={{
+                            position: "absolute",
+                            left: `${field.x * 100}%`,
+                            top: `${field.y * 100}%`,
+                            width: `${field.width * 100}%`,
+                            height: `${field.height * 100}%`,
+                            objectFit: "contain",
+                            userSelect: "none",
+                          }}
+                        />
+                      );
+                    })}
+                </div>
+
                 <div className="pointer-events-none absolute inset-0 z-10">
                   {fields
-                    .filter((f) => f.pageNumber === pageNumber)
+                    .filter((f) => f.pageNumber === pageNumber && f.type !== "image")
                     .map((field) => {
                       const value = values[field.id] ?? "";
                       const isFilled = !!value;
@@ -258,6 +289,9 @@ export function SigningDocumentView({
                         ? getFieldRect(field, displayPage.width, displayPage.height)
                         : null;
                       const padding = getScaledFieldPadding(displayScale);
+
+                      const isAutoLocked = field.type === "date-signed" || field.type === "email";
+                      const isAutoFillable = field.type === "full-name";
 
                       const textStyle = {
                         color: field.textColor,
@@ -277,15 +311,17 @@ export function SigningDocumentView({
                           onClick={() => { if (!isEditing) handleFieldClick(field); }}
                           className={cn(
                             "pointer-events-auto absolute rounded-[6px] border-2 transition",
-                            isEditing
-                              ? "cursor-text border-solid border-ink bg-white/20"
-                              : isFilled
-                                ? "cursor-pointer border-solid border-teal-500 bg-teal-50/50"
-                                : isSignature
-                                  ? "cursor-pointer border-dashed border-amber-400 bg-amber-50/70 hover:bg-amber-100/70"
-                                  : field.required
-                                    ? "cursor-pointer border-dashed border-amber-400 bg-amber-50/50 hover:bg-amber-100/50"
-                                    : "cursor-pointer border-dashed border-slate-300 bg-slate-50/50 hover:bg-slate-100/50"
+                            isAutoLocked
+                              ? "cursor-default border-solid border-slate-300 bg-slate-50/80"
+                              : isEditing
+                                ? "cursor-text border-solid border-ink bg-white/20"
+                                : isFilled
+                                  ? "cursor-pointer border-solid border-teal-500 bg-teal-50/50"
+                                  : isSignature
+                                    ? "cursor-pointer border-dashed border-amber-400 bg-amber-50/70 hover:bg-amber-100/70"
+                                    : field.required
+                                      ? "cursor-pointer border-dashed border-amber-400 bg-amber-50/50 hover:bg-amber-100/50"
+                                      : "cursor-pointer border-dashed border-slate-300 bg-slate-50/50 hover:bg-slate-100/50"
                           )}
                           style={{
                             left: rect ? `${rect.left}px` : `${field.x * 100}%`,
@@ -295,7 +331,15 @@ export function SigningDocumentView({
                           }}
                         >
                           <div className="relative h-full w-full overflow-hidden rounded-[6px]">
-                            {isSignature ? (
+                            {isAutoLocked ? (
+                              <div className="flex h-full w-full items-center gap-1 overflow-hidden" style={{ ...textStyle, ...contentPadding }}>
+                                {field.type === "date-signed"
+                                  ? <CalendarCheck className="shrink-0 opacity-40" style={{ width: Math.max(9, 11 * displayScale), height: Math.max(9, 11 * displayScale) }} />
+                                  : <Lock className="shrink-0 opacity-40" style={{ width: Math.max(9, 10 * displayScale), height: Math.max(9, 10 * displayScale) }} />
+                                }
+                                <span className="flex-1 truncate">{value}</span>
+                              </div>
+                            ) : isSignature ? (
                               isFilled ? (
                                 <div className="flex h-full w-full items-center justify-center">
                                   <img
@@ -398,12 +442,20 @@ export function SigningDocumentView({
                                 style={{ ...textStyle, ...contentPadding }}
                               />
                             ) : (
-                              <div className="flex h-full items-center" style={{ ...textStyle, ...contentPadding }}>
+                              <div className="flex h-full items-center gap-1 overflow-hidden" style={{ ...textStyle, ...contentPadding }}>
                                 {isFilled ? (
-                                  <span className="max-h-full overflow-hidden">{value}</span>
+                                  <span className="flex-1 truncate">{value}</span>
                                 ) : (
-                                  <span className="max-h-full overflow-hidden opacity-50">
+                                  <span className="flex-1 truncate opacity-50">
                                     {field.placeholder}{field.required ? " *" : ""}
+                                  </span>
+                                )}
+                                {isAutoFillable && isFilled && (
+                                  <span
+                                    className="ml-auto shrink-0 rounded px-1 text-indigo-500 opacity-60"
+                                    style={{ fontSize: Math.max(7, 8 * displayScale), background: "rgba(99,102,241,0.1)" }}
+                                  >
+                                    Auto
                                   </span>
                                 )}
                               </div>

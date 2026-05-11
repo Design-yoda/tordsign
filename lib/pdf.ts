@@ -2,7 +2,7 @@ import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb, type Color } from "p
 import { readFile } from "fs/promises";
 import path from "path";
 import { fetchStoredPdf } from "@/lib/storage";
-import type { CompletedFieldValue, DocumentBlock, DocumentRecord, FieldDraft, FieldType, PageSize, TextSegment } from "@/lib/types";
+import type { CompletedFieldValue, DocumentBlock, DocumentRecord, FieldDraft, FieldType, PageMargins, PageSize, TextSegment } from "@/lib/types";
 import { getPdfFieldRect } from "@/lib/field-rendering";
 
 export const PAGE_SIZES: Record<PageSize, { width: number; height: number; label: string }> = {
@@ -392,6 +392,31 @@ export async function renderCompletedPdf(
     });
   }
 
+  // Render image fields (type "image")
+  for (const field of document.fields) {
+    if (field.type !== "image") continue;
+    const value = fieldValues.find(e => e.fieldId === field.id)?.value ?? field.value ?? "";
+    const imageDataUrl = value || field.value;
+    if (!imageDataUrl || !imageDataUrl.startsWith("data:image/")) continue;
+    try {
+      const page = pdf.getPage(field.pageNumber - 1);
+      const pageWidth = page.getWidth();
+      const pageHeight = page.getHeight();
+      const { left: x, top: y, width: w, height: h } = getPdfFieldRect(field, pageWidth, pageHeight);
+      const base64 = imageDataUrl.split(",")[1] ?? "";
+      const imgBytes = Uint8Array.from(Buffer.from(base64, "base64"));
+      let image;
+      if (imageDataUrl.startsWith("data:image/png")) {
+        image = await pdf.embedPng(imgBytes);
+      } else {
+        image = await pdf.embedJpg(imgBytes);
+      }
+      page.drawImage(image, { x, y, width: w, height: h });
+    } catch {
+      // skip malformed image
+    }
+  }
+
   const signerName = meta?.signerName ?? document.recipient_name ?? "Signer";
   const completedAt = meta?.completedAt ?? new Date().toISOString();
   const senderIp = document.audit_trail
@@ -435,15 +460,16 @@ type BlockField = Omit<FieldDraft, "recipientEmail" | "value">;
 export async function renderBlocksToPdf(
   blocks: DocumentBlock[],
   title: string,
-  pageSize: PageSize = "a4"
+  pageSize: PageSize = "a4",
+  pageMargins: PageMargins = { top: 80, right: 72, bottom: 80, left: 72 }
 ): Promise<{ pdfBytes: Uint8Array; fields: BlockField[] }> {
   const pageDims = PAGE_SIZES[pageSize];
   const PAGE_W = pageDims.width;
   const PAGE_H = pageDims.height;
-  const MARGIN_L = 72;
-  const MARGIN_R = 72;
-  const MARGIN_T = 80;
-  const MARGIN_B = 80;
+  const MARGIN_L = pageMargins.left;
+  const MARGIN_R = pageMargins.right;
+  const MARGIN_T = pageMargins.top;
+  const MARGIN_B = pageMargins.bottom;
   const TEXT_W = PAGE_W - MARGIN_L - MARGIN_R;
 
   const pdf = await PDFDocument.create();
@@ -478,6 +504,13 @@ export async function renderBlocksToPdf(
   const fields: BlockField[] = [];
 
   for (const block of blocks) {
+    if (block.type === "pageBreak") {
+      page = pdf.addPage([PAGE_W, PAGE_H]);
+      pageNum++;
+      drawY = PAGE_H - MARGIN_T;
+      continue;
+    }
+
     if (block.type === "divider") {
       ensureSpace(24);
       drawY -= 12;
@@ -528,6 +561,117 @@ export async function renderBlocksToPdf(
       });
 
       drawY -= 8;
+      continue;
+    }
+
+    if (block.type === "checkboxItem") {
+      const text = block.content || "";
+      const BOX = 11;
+      const fSize = 11;
+      const lh = 18;
+      const indent = BOX + 8;
+      const maxW = TEXT_W - indent;
+      const wrappedLines = wrapText(text, (s) => regular.widthOfTextAtSize(s, fSize), maxW);
+      const blockH = wrappedLines.length * lh + 4;
+      ensureSpace(blockH);
+
+      // Draw the unchecked box
+      drawY -= lh;
+      const boxY = drawY + (lh - BOX) * 0.5;
+      page.drawRectangle({
+        x: MARGIN_L, y: boxY,
+        width: BOX, height: BOX,
+        borderColor: rgb(0.58, 0.64, 0.69),
+        borderWidth: 1.5,
+      });
+
+      if (wrappedLines[0]?.trim()) {
+        page.drawText(wrappedLines[0], {
+          x: MARGIN_L + indent, y: drawY + lh * 0.2,
+          size: fSize, font: regular, color: INK,
+        });
+      }
+      for (let i = 1; i < wrappedLines.length; i++) {
+        drawY -= lh;
+        if (wrappedLines[i]?.trim()) {
+          page.drawText(wrappedLines[i], {
+            x: MARGIN_L + indent, y: drawY + lh * 0.2,
+            size: fSize, font: regular, color: INK,
+          });
+        }
+      }
+
+      drawY -= 4;
+      continue;
+    }
+
+    if (block.type === "radioGroup") {
+      const options = block.fieldOptions ?? ["Option 1", "Option 2", "Option 3"];
+      const label = block.content || "Radio group";
+      const fSize = 11;
+      const lh = 18;
+      const CIRCLE_R = 4.5;
+      const headerH = lh + 4;
+      const optionsH = options.length * lh;
+      ensureSpace(headerH + optionsH + 8);
+
+      // Group label
+      drawY -= lh;
+      page.drawText(label, {
+        x: MARGIN_L, y: drawY + lh * 0.2,
+        size: 10, font: bold, color: INK,
+      });
+      drawY -= 4;
+
+      const groupTopY = drawY;
+      const optionYPositions: number[] = [];
+
+      for (const opt of options) {
+        drawY -= lh;
+        const cy = drawY + lh * 0.5;
+        optionYPositions.push(drawY);
+        // Radio circle (outer ring)
+        page.drawCircle({
+          x: MARGIN_L + CIRCLE_R, y: cy,
+          size: CIRCLE_R,
+          borderColor: rgb(0.58, 0.64, 0.69),
+          borderWidth: 1.5,
+        });
+        if (opt.trim()) {
+          page.drawText(opt, {
+            x: MARGIN_L + CIRCLE_R * 2 + 6, y: drawY + lh * 0.2,
+            size: fSize, font: regular, color: INK,
+          });
+        }
+      }
+
+      drawY -= 8;
+      continue;
+    }
+
+    if (block.type === "image") {
+      const src = block.content;
+      if (!src || !src.startsWith("data:image/")) { drawY -= 4; continue; }
+      try {
+        const base64 = src.split(",")[1] ?? "";
+        const imgBytes = Uint8Array.from(Buffer.from(base64, "base64"));
+        let image;
+        if (src.startsWith("data:image/png")) {
+          image = await pdf.embedPng(imgBytes);
+        } else {
+          image = await pdf.embedJpg(imgBytes);
+        }
+        const dims = image.scale(1);
+        const maxImgW = block.imageWidthPct ? TEXT_W * (block.imageWidthPct / 100) : TEXT_W;
+        const maxImgH = PAGE_H * 0.5;
+        let imgW = Math.min(dims.width, maxImgW);
+        let imgH = dims.height * (imgW / dims.width);
+        if (imgH > maxImgH) { imgW *= maxImgH / imgH; imgH = maxImgH; }
+        ensureSpace(imgH + 12);
+        drawY -= imgH;
+        page.drawImage(image, { x: MARGIN_L, y: drawY, width: imgW, height: imgH });
+        drawY -= 12;
+      } catch { drawY -= 4; }
       continue;
     }
 

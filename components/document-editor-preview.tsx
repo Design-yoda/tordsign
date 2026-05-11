@@ -2,7 +2,7 @@
 
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useEffect, useRef, useState } from "react";
-import { CheckSquare, ChevronDown, ChevronUp, Circle, LoaderCircle, Minus, PenLine, Plus, X } from "lucide-react";
+import { CalendarCheck, CalendarDays, CheckSquare, ChevronDown, ChevronUp, Circle, LoaderCircle, Lock, Mail, Minus, PenLine, Plus, Type, User, X } from "lucide-react";
 import { Document, Page, pdfjs } from "react-pdf";
 import type { FieldDraft } from "@/lib/types";
 import { SignatureModal } from "@/components/signature-modal";
@@ -22,6 +22,56 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 ).toString();
 
 type ResizeMode = "move" | "resize-tl" | "resize-tr" | "resize-bl" | "resize-br";
+
+const AUTO_FILL_TYPES = new Set(["date-signed", "email", "full-name"]);
+
+function FieldTypeContent({
+  field,
+  textStyle,
+  contentPadding,
+  displayScale,
+}: {
+  field: FieldDraft;
+  textStyle: React.CSSProperties;
+  contentPadding: React.CSSProperties;
+  displayScale: number;
+}) {
+  const iconSize = Math.max(9, 11 * displayScale);
+  const isAuto = AUTO_FILL_TYPES.has(field.type);
+
+  const iconNode = (() => {
+    if (field.type === "date-signed") return <CalendarCheck style={{ width: iconSize, height: iconSize }} className="shrink-0" />;
+    if (field.type === "full-name") return <User style={{ width: iconSize, height: iconSize }} className="shrink-0" />;
+    if (field.type === "email") return <Mail style={{ width: iconSize, height: iconSize }} className="shrink-0" />;
+    if (field.type === "date") return <CalendarDays style={{ width: iconSize, height: iconSize }} className="shrink-0" />;
+    if (field.type === "dropdown") return <ChevronDown style={{ width: iconSize, height: iconSize }} className="shrink-0" />;
+    if (field.type === "radio") return <Circle style={{ width: iconSize, height: iconSize }} className="shrink-0" />;
+    return <Type style={{ width: iconSize, height: iconSize }} className="shrink-0" />;
+  })();
+
+  const label = field.value || field.placeholder;
+  const showValue = !!field.value;
+
+  return (
+    <div className="flex h-full w-full items-center gap-1 overflow-hidden" style={{ ...textStyle, ...contentPadding }}>
+      {!showValue && <span className="shrink-0 opacity-50">{iconNode}</span>}
+      <span className={cn("flex-1 truncate", showValue ? "opacity-90" : "opacity-60")}>{label}</span>
+      {isAuto && !showValue && (
+        <span
+          className="ml-auto shrink-0 rounded px-1 font-bold uppercase tracking-wide"
+          style={{
+            fontSize: Math.max(7, 8 * displayScale),
+            paddingBlock: Math.max(1, 2 * displayScale),
+            background: "rgba(99,102,241,0.12)",
+            color: "#4f46e5",
+          }}
+        >
+          {field.type === "email" ? <Lock style={{ width: Math.max(7, 9 * displayScale), height: Math.max(7, 9 * displayScale) }} /> : "Auto"}
+        </span>
+      )}
+    </div>
+  );
+}
 
 export function DocumentEditorPreview({
   documentId,
@@ -261,6 +311,7 @@ export function DocumentEditorPreview({
       if (hasMoved || mode !== "move") return;
 
       // Tap on field: open appropriate interaction
+      if (field.type === "image") return; // no tap action for images
       if (field.type === "signature" || field.type === "initials") {
         setSignatureModal({ fieldId: field.id, isInitials: field.type === "initials" });
       } else {
@@ -395,13 +446,58 @@ export function DocumentEditorPreview({
                   {fields
                     .filter((field) => field.pageNumber === pageNumber)
                     .map((field) => {
+                      const rect = originalPage
+                        ? getFieldRect(field, displayPage.width, displayPage.height)
+                        : null;
+
+                      // Image overlay early return
+                      if (field.type === "image" && field.value) {
+                        return (
+                          <div
+                            key={field.id}
+                            onPointerDown={(event) => beginInteraction(event, field, "move")}
+                            className="pointer-events-auto absolute overflow-hidden"
+                            style={{
+                              left: rect ? `${rect.left}px` : `${field.x * 100}%`,
+                              top: rect ? `${rect.top}px` : `${field.y * 100}%`,
+                              width: rect ? `${rect.width}px` : `${field.width * 100}%`,
+                              height: rect ? `${rect.height}px` : `${field.height * 100}%`,
+                            }}
+                          >
+                            <img
+                              src={field.value}
+                              alt={field.placeholder}
+                              className="h-full w-full object-contain select-none"
+                              draggable={false}
+                            />
+                            {!readOnly && (
+                              <>
+                                {onFieldRemove && (
+                                  <button
+                                    type="button"
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => { e.stopPropagation(); onFieldRemove(field.id); }}
+                                    className="absolute -right-2 -top-2 z-20 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-white shadow-sm"
+                                    title="Remove image"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                )}
+                                {/* Resize handles */}
+                                <span onPointerDown={(e) => beginInteraction(e, field, "resize-tl")} className="absolute -left-1.5 -top-1.5 z-20 h-3 w-3 cursor-nwse-resize rounded-sm bg-white shadow-sm ring-1 ring-ink/50" />
+                                <span onPointerDown={(e) => beginInteraction(e, field, "resize-tr")} className="absolute -right-1.5 -top-1.5 z-20 h-3 w-3 cursor-nesw-resize rounded-sm bg-white shadow-sm ring-1 ring-ink/50" />
+                                <span onPointerDown={(e) => beginInteraction(e, field, "resize-bl")} className="absolute -bottom-1.5 -left-1.5 z-20 h-3 w-3 cursor-nesw-resize rounded-sm bg-white shadow-sm ring-1 ring-ink/50" />
+                                <span onPointerDown={(e) => beginInteraction(e, field, "resize-br")} className="absolute -bottom-1.5 -right-1.5 z-20 h-3 w-3 cursor-nwse-resize rounded-sm bg-white shadow-sm ring-1 ring-ink/50" />
+                              </>
+                            )}
+                          </div>
+                        );
+                      }
+
                       const isSignature = field.type === "signature" || field.type === "initials";
                       const isEditing = editingFieldId === field.id;
                       const hasCaptured = isSignature && !!field.value;
                       const isCheckbox = field.type === "checkbox";
-                      const rect = originalPage
-                        ? getFieldRect(field, displayPage.width, displayPage.height)
-                        : null;
                       const padding = getScaledFieldPadding(displayScale);
 
                       const fieldStyle = {
@@ -515,11 +611,12 @@ export function DocumentEditorPreview({
                                 style={{ ...textStyle, ...contentPadding }}
                               />
                             ) : (
-                              <div className="flex h-full items-center" style={{ ...textStyle, ...contentPadding }}>
-                                <span className="max-h-full overflow-hidden opacity-70">
-                                  {field.value || field.placeholder}
-                                </span>
-                              </div>
+                              <FieldTypeContent
+                                field={field}
+                                textStyle={textStyle}
+                                contentPadding={contentPadding}
+                                displayScale={displayScale}
+                              />
                             )}
                           </div>
 

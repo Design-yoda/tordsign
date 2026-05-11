@@ -22,9 +22,9 @@ export async function POST(
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
-    const { title, senderName, senderEmail, blocks, pageSize } = parsed.data;
+    const { title, senderName, senderEmail, blocks, pageSize, pageMargins } = parsed.data;
 
-    const { pdfBytes, fields: rawFields } = await renderBlocksToPdf(blocks, title, pageSize);
+    const { pdfBytes, fields: rawFields } = await renderBlocksToPdf(blocks, title, pageSize, pageMargins);
 
     const fileName = `${title.replace(/[^a-zA-Z0-9]/g, "-").slice(0, 40)}.pdf`;
     const storagePath = await uploadSourcePdf({
@@ -51,6 +51,8 @@ export async function POST(
       emailMessage: existing.email_message ?? "",
       sourceBlocks: blocks,
       sourcePdfPath: storagePath,
+      pageSize,
+      pageMargins,
     });
 
     return NextResponse.json({ success: true });

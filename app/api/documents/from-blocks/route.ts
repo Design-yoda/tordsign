@@ -15,9 +15,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
-    const { title, senderName, senderEmail, blocks, pageSize } = parsed.data;
+    const { title, senderName, senderEmail, blocks, pageSize, pageMargins } = parsed.data;
 
-    const { pdfBytes, fields: rawFields } = await renderBlocksToPdf(blocks, title, pageSize);
+    const { pdfBytes, fields: rawFields } = await renderBlocksToPdf(blocks, title, pageSize, pageMargins);
 
     const docId = nanoid(12);
     const fileName = `${title.replace(/[^a-zA-Z0-9]/g, "-").slice(0, 40)}.pdf`;
@@ -41,7 +41,9 @@ export async function POST(request: Request) {
       senderEmail,
       sourcePdfPath: storagePath,
       initialFields,
-      sourceBlocks: blocks
+      sourceBlocks: blocks,
+      pageSize,
+      pageMargins,
     });
 
     return NextResponse.json({ document });

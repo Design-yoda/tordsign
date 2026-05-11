@@ -2,6 +2,13 @@ export type DocumentStatus = "Draft" | "Sent" | "Completed" | "Expired";
 
 export type PageSize = "a4" | "letter" | "legal" | "a5";
 
+export type PageMargins = {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+};
+
 export type FieldType =
   | "signature"
   | "initials"
@@ -14,7 +21,8 @@ export type FieldType =
   | "date"
   | "checkbox"
   | "dropdown"
-  | "radio";
+  | "radio"
+  | "image";
 
 export type FieldFontFamily = "Helvetica" | "TimesRoman" | "Courier";
 export type FieldFontWeight = "normal" | "bold";
@@ -55,6 +63,8 @@ export type DocumentRecord = {
   fields: FieldDraft[];
   audit_trail: AuditEvent[];
   source_blocks?: DocumentBlock[];
+  source_page_size?: PageSize;
+  source_page_margins?: PageMargins;
   updated_at: string;
 };
 
@@ -98,7 +108,11 @@ export type DocumentBlockType =
   | "numbered"
   | "quote"
   | "divider"
-  | "field";
+  | "field"
+  | "pageBreak"
+  | "checkboxItem"
+  | "radioGroup"
+  | "image";
 
 export type DocumentBlock = {
   id: string;
@@ -112,4 +126,5 @@ export type DocumentBlock = {
   fieldType?: FieldType;
   fieldLabel?: string;
   fieldOptions?: string[];
+  imageWidthPct?: number;
 };
