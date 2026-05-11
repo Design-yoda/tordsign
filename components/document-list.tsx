@@ -18,11 +18,6 @@ import { formatDate } from "@/lib/utils";
 import type { DocumentBlock, DocumentRecord } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  "pdfjs-dist/build/pdf.worker.min.mjs",
-  import.meta.url
-).toString();
-
 // ── Thumbnail dimensions (A4 ratio) ─────────────────────────────────────────
 const CARD_W = 168;
 const CARD_H = 238;
@@ -272,7 +267,13 @@ export function DocumentList({ documents: initialDocuments }: { documents: Docum
   const [modal, setModal] = useState<ModalState>({ type: "idle" });
   const [isDeleting, setIsDeleting] = useState(false);
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    setMounted(true);
+    pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+      "pdfjs-dist/build/pdf.worker.min.mjs",
+      import.meta.url
+    ).toString();
+  }, []);
 
   async function handleDelete(doc: DocumentRecord) {
     setIsDeleting(true);
