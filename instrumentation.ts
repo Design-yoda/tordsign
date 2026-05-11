@@ -1,16 +1,18 @@
+// Polyfill Promise.withResolvers at module scope so it's available before
+// any dependency (e.g. pdfjs-dist) is evaluated. Node <22 lacks this method.
+if (typeof Promise.withResolvers === "undefined") {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (Promise as any).withResolvers = function <T>() {
+    let resolve!: (value: T | PromiseLike<T>) => void;
+    let reject!: (reason?: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+}
+
 export async function register() {
-  // Promise.withResolvers was added in Node 22. Polyfill it for older runtimes
-  // so pdfjs-dist doesn't crash during server-side prerendering.
-  if (typeof Promise.withResolvers === "undefined") {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (Promise as any).withResolvers = function <T>() {
-      let resolve!: (value: T | PromiseLike<T>) => void;
-      let reject!: (reason?: unknown) => void;
-      const promise = new Promise<T>((res, rej) => {
-        resolve = res;
-        reject = rej;
-      });
-      return { promise, resolve, reject };
-    };
-  }
+  // polyfill already applied above at module load time
 }
