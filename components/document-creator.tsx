@@ -577,7 +577,15 @@ function tiptapToBlocks(doc: { content?: TiptapNode[] }): DocumentBlock[] {
       const level = (node.attrs?.level as number) ?? 1;
       const type: DocumentBlockType = level === 1 ? "heading1" : level === 2 ? "heading2" : "heading3";
       const textAlign = node.attrs?.textAlign as DocumentBlock["textAlign"] | undefined;
-      blocks.push({ id, type, content: extractText(node.content), ...(textAlign ? { textAlign } : {}) });
+      const content = extractText(node.content);
+      const rawSegs = extractSegments(node.content ?? []);
+      // Headings are bold by default (CSS); force bold on all segments so PDF matches
+      const segments = rawSegs.map(s => ({ ...s, bold: true }));
+      blocks.push({
+        id, type, content,
+        ...(segments.length > 0 ? { segments } : {}),
+        ...(textAlign ? { textAlign } : {}),
+      });
       continue;
     }
 
@@ -663,7 +671,18 @@ function tiptapToBlocks(doc: { content?: TiptapNode[] }): DocumentBlock[] {
     }
   }
 
-  return blocks.filter((b) =>
+  // Keep all paragraphs — empty ones represent blank lines the user created with Enter.
+  // Only strip trailing empty paragraphs that Tiptap always appends at end of doc.
+  let trimEnd = blocks.length;
+  while (trimEnd > 0) {
+    const last = blocks[trimEnd - 1];
+    if (last.type === "paragraph" && !last.content.trim() && (!last.segments || last.segments.length === 0)) {
+      trimEnd--;
+    } else break;
+  }
+
+  return blocks.slice(0, trimEnd).filter((b) =>
+    b.type === "paragraph" ||
     b.type === "divider" || b.type === "field" || b.type === "pageBreak" ||
     b.type === "checkboxItem" || b.type === "radioGroup" || b.type === "image" ||
     b.content.trim() !== ""
@@ -700,11 +719,11 @@ function blocksToTiptap(blocks: DocumentBlock[]): { type: string; content: Tipta
     if (block.type === "paragraph") {
       nodes.push({ type: "paragraph", content: segmentsToTiptapContent(block.segments, block.content) });
     } else if (block.type === "heading1") {
-      nodes.push({ type: "heading", attrs: { level: 1 }, content: [{ type: "text", text: block.content }] });
+      nodes.push({ type: "heading", attrs: { level: 1, ...(block.textAlign ? { textAlign: block.textAlign } : {}) }, content: segmentsToTiptapContent(block.segments, block.content) });
     } else if (block.type === "heading2") {
-      nodes.push({ type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: block.content }] });
+      nodes.push({ type: "heading", attrs: { level: 2, ...(block.textAlign ? { textAlign: block.textAlign } : {}) }, content: segmentsToTiptapContent(block.segments, block.content) });
     } else if (block.type === "heading3") {
-      nodes.push({ type: "heading", attrs: { level: 3 }, content: [{ type: "text", text: block.content }] });
+      nodes.push({ type: "heading", attrs: { level: 3, ...(block.textAlign ? { textAlign: block.textAlign } : {}) }, content: segmentsToTiptapContent(block.segments, block.content) });
     } else if (block.type === "bullet") {
       nodes.push({
         type: "bulletList",

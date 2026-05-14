@@ -701,8 +701,8 @@ export async function renderBlocksToPdf(
     const align = block.textAlign;
     const prefix = block.type === "bullet" ? "• " : block.type === "numbered" ? "1. " : "";
 
-    // Use segments for inline formatting when available (Tiptap output)
-    const hasSegments = !isHeading && block.segments && block.segments.length > 0;
+    // Use segments for inline formatting when available (Tiptap output), including headings
+    const hasSegments = Array.isArray(block.segments) && block.segments.length > 0;
     let allSegmentLines: SegmentWord[][] = [];
     let allPlainLines: string[] = [];
 
@@ -720,13 +720,23 @@ export async function renderBlocksToPdf(
       }
     }
 
+    // Compute per-line heights so large custom font sizes don't cause line overlap
+    const segLineLhs: number[] = hasSegments
+      ? allSegmentLines.map((lineWords) => {
+          const maxFs = lineWords.reduce((m, w) => Math.max(m, w.fontSize ?? fSize), fSize);
+          return Math.max(lh, Math.ceil(maxFs * 1.45));
+        })
+      : [];
+    const totalSegH = segLineLhs.reduce((s, h) => s + h, 0);
+
     const lineCount = hasSegments ? allSegmentLines.length : allPlainLines.length;
-    const blockH = topPad + lineCount * lh + 6;
+    const totalLinesH = hasSegments ? totalSegH : lineCount * lh;
+    const blockH = topPad + totalLinesH + 6;
     ensureSpace(blockH);
 
     if (topPad) drawY -= topPad;
     const blockTop = drawY;
-    const blockBottom = drawY - lineCount * lh - 2;
+    const blockBottom = drawY - totalLinesH - 2;
 
     if (block.highlighted || block.backgroundColor) {
       page.drawRectangle({
@@ -744,9 +754,11 @@ export async function renderBlocksToPdf(
     }
 
     if (hasSegments) {
-      for (const lineWords of allSegmentLines) {
-        drawY -= lh;
-        drawSegmentLine(page, lineWords, MARGIN_L + indent, drawY + lh * 0.2, fSize, fonts, textColor, align, maxW);
+      for (let li = 0; li < allSegmentLines.length; li++) {
+        const lineWords = allSegmentLines[li];
+        const lineLh = segLineLhs[li];
+        drawY -= lineLh;
+        drawSegmentLine(page, lineWords, MARGIN_L + indent, drawY + lineLh * 0.2, fSize, fonts, textColor, align, maxW);
       }
     } else {
       for (const line of allPlainLines) {

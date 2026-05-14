@@ -54,8 +54,12 @@ function normalizeDocument(row: DocumentRow): DocumentRecord {
   };
 }
 
-export async function getRecentDocuments() {
+export async function getRecentDocuments(documentIds: string[] = []) {
   if (!hasEnv()) {
+    return [];
+  }
+
+  if (documentIds.length === 0) {
     return [];
   }
 
@@ -63,6 +67,7 @@ export async function getRecentDocuments() {
   const { data, error } = await supabase
     .from("documents")
     .select("*")
+    .in("id", documentIds)
     .order("updated_at", { ascending: false })
     .limit(12);
 

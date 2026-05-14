@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { getRecentDocuments } from "@/lib/data";
+import { getSessionDocumentIds } from "@/lib/session-documents";
 import { DocumentList } from "@/components/document-list";
 import { NewDocumentButton } from "@/components/new-document-button";
 import { TEMPLATE_LIST } from "@/lib/templates";
@@ -80,7 +82,8 @@ function TemplateThumbCard({ tpl }: { tpl: TemplateDefinition }) {
 }
 
 export default async function HomePage() {
-  const documents = await getRecentDocuments();
+  const cookieStore = await cookies();
+  const documents = await getRecentDocuments(getSessionDocumentIds(cookieStore));
 
   return (
     <main className="mx-auto flex min-h-screen max-w-7xl flex-col gap-10 px-6 py-10">

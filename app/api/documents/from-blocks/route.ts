@@ -1,12 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { nanoid } from "nanoid";
 import { createDraftDocument } from "@/lib/data";
 import { renderBlocksToPdf } from "@/lib/pdf";
 import { uploadSourcePdf } from "@/lib/storage";
 import { createFromBlocksSchema } from "@/lib/validators";
+import { trackSessionDocument } from "@/lib/session-documents";
 import type { FieldDraft } from "@/lib/types";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const parsed = createFromBlocksSchema.safeParse(body);
@@ -46,7 +47,9 @@ export async function POST(request: Request) {
       pageMargins,
     });
 
-    return NextResponse.json({ document });
+    const response = NextResponse.json({ document });
+    trackSessionDocument(response, request.cookies, document.id);
+    return response;
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Internal server error" },

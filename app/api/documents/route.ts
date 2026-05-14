@@ -1,10 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { nanoid } from "nanoid";
 import { createDraftDocument } from "@/lib/data";
 import { createDocumentSchema } from "@/lib/validators";
 import { uploadSourcePdf } from "@/lib/storage";
+import { trackSessionDocument } from "@/lib/session-documents";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get("file");
@@ -47,7 +48,9 @@ export async function POST(request: Request) {
       sourcePdfPath: storagePath
     });
 
-    return NextResponse.json({ document });
+    const response = NextResponse.json({ document });
+    trackSessionDocument(response, request.cookies, document.id);
+    return response;
   } catch (error) {
     console.error("[POST /api/documents]", error);
     return NextResponse.json(
